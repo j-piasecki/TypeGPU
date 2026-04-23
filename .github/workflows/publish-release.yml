@@ -27,7 +27,20 @@ jobs:
               continue
             fi
             name=$(jq -r '.name' "$pkgjson")
-            PACKAGES=$(echo "$PACKAGES" | jq -c --arg name "$name" --arg path "$pkgjson" '. + [{name: $name, path: $path}]')
+            version=$(jq -r '.version' "$pkgjson")
+            case "$version" in
+              *-alpha*)   release_type="alpha" ;;
+              *-beta*)    release_type="beta" ;;
+              *-rc*)      release_type="rc" ;;
+              *-nightly*) release_type="nightly" ;;
+              *-*)        echo "Unsupported prerelease suffix in $name@$version"; exit 1 ;;
+              *)          release_type="stable" ;;
+            esac
+            PACKAGES=$(echo "$PACKAGES" | jq -c \
+              --arg name "$name" \
+              --arg path "$pkgjson" \
+              --arg releaseType "$release_type" \
+              '. + [{name: $name, path: $path, releaseType: $releaseType}]')
           done
           echo "Discovered packages: $PACKAGES"
           echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
@@ -95,8 +108,10 @@ jobs:
         with:
           package-name: ${{ matrix.package.name }}
           package-json-path: ${{ matrix.package.path }}
-          release-type: 'stable'
+          # TODO: this will very likely break with automatic versioning
+          release-type: ${{ matrix.package.releaseType }}
           version-getter-script: scripts/resolve-version.mjs
           install-dependencies-command: 'pnpm install --frozen-lockfile'
           package-manager: 'pnpm'
+          perform-git-operations: ${{ matrix.package.releaseType == 'stable' }}
           dry-run: ${{ inputs.dry-run }}
