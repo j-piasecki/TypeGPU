@@ -1,6 +1,5 @@
 name: Publish release to npm
 on:
-  # For manual releases
   workflow_dispatch:
     inputs:
       dry-run:
@@ -9,7 +8,32 @@ on:
         default: true
 
 jobs:
-  npm-build:
+  discover-packages:
+    if: github.repository == 'software-mansion/TypeGPU'
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.list.outputs.packages }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: List publishable packages
+        id: list
+        run: |
+          PACKAGES="[]"
+          for pkgjson in packages/*/package.json; do
+            is_private=$(jq -r '.private // false' "$pkgjson")
+            if [ "$is_private" = "true" ]; then
+              continue
+            fi
+            name=$(jq -r '.name' "$pkgjson")
+            PACKAGES=$(echo "$PACKAGES" | jq -c --arg name "$name" --arg path "$pkgjson" '. + [{name: $name, path: $path}]')
+          done
+          echo "Discovered packages: $PACKAGES"
+          echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: discover-packages
     if: github.repository == 'software-mansion/TypeGPU'
     runs-on: ubuntu-latest
 
@@ -18,29 +42,61 @@ jobs:
       id-token: write # for OIDC
 
     concurrency:
-      group: publish-${{ github.ref }}
+      group: publish-${{ github.ref }}-${{ matrix.package.name }}
       cancel-in-progress: false
+
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.discover-packages.outputs.packages) }}
 
     steps:
       - name: Check out
         uses: actions/checkout@v4
 
+      - name: Check if version is already published
+        id: check-published
+        run: |
+          VERSION=$(node scripts/resolve-version.mjs \
+            --package-name '${{ matrix.package.name }}' \
+            --package-json-path '${{ matrix.package.path }}')
+          PUBLISHED=$(npm view "${{ matrix.package.name }}@${VERSION}" version 2>/dev/null || true)
+          if [ -n "$PUBLISHED" ]; then
+            echo "Skipping: ${{ matrix.package.name }}@${VERSION} is already on npm."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will publish: ${{ matrix.package.name }}@${VERSION}."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install pnpm
+        if: steps.check-published.outputs.skip != 'true'
         uses: pnpm/action-setup@v4
         with:
           run_install: false
 
       - name: Use Node.js 24.x
+        if: steps.check-published.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24.x
           cache: 'pnpm'
+          registry-url: https://registry.npmjs.org/
 
       - name: Install dependencies
+        if: steps.check-published.outputs.skip != 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Publish manual release
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Publish ${{ matrix.package.name }}
+        if: steps.check-published.outputs.skip != 'true'
         env:
-          DISABLE_DRY_RUN: ${{ inputs['dry-run'] == false }}
-        run: pnpm exec bun scripts/publish.ts
+          SKIP_TESTS: 'true'
+        uses: software-mansion/npm-package-publish@0b2865a6329e11859a1105272db9c7e536b8c93a
+        with:
+          package-name: ${{ matrix.package.name }}
+          package-json-path: ${{ matrix.package.path }}
+          release-type: 'stable'
+          version-getter-script: scripts/resolve-version.mjs
+          install-dependencies-command: 'pnpm install --frozen-lockfile'
+          package-manager: 'pnpm'
+          dry-run: ${{ inputs.dry-run }}

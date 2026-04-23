@@ -34,7 +34,7 @@
   "scripts": {
     "build": "tsdown",
     "test:types": "pnpm tsc --p ./tsconfig.json --noEmit && pnpm tsc --p ./tsconfig.test.json --noEmit",
-    "prepublishOnly": "tgpu-dev-cli prepack"
+    "prepack": "tgpu-dev-cli prepack"
   },
   "devDependencies": {
     "@typegpu/tgpu-dev-cli": "workspace:*",

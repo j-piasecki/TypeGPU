@@ -45,7 +45,7 @@
     "docs:check": "eslint-doc-generator --check",
     "docs:update": "eslint-doc-generator",
     "test": "vitest",
-    "prepublishOnly": "pnpm run docs:check && pnpm run test:types && vitest run && pnpm run build"
+    "prepack": "pnpm run docs:check && pnpm run test:types && vitest run && pnpm run build"
   },
   "dependencies": {
     "@typescript-eslint/utils": "^8.57.2"

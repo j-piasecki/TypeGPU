@@ -51,7 +51,7 @@
   },
   "scripts": {
     "build": "tsdown",
-    "prepublishOnly": "tgpu-dev-cli prepack"
+    "prepack": "tgpu-dev-cli prepack"
   },
   "devDependencies": {
     "@typegpu/tgpu-dev-cli": "workspace:*",

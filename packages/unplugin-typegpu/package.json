@@ -164,7 +164,7 @@
   "scripts": {
     "build": "tsdown",
     "test:types": "pnpm tsc --p ./tsconfig.json --noEmit",
-    "prepublishOnly": "tgpu-dev-cli prepack"
+    "prepack": "tgpu-dev-cli prepack"
   },
   "dependencies": {
     "@babel/parser": "^7.29.0",
